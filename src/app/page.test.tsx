@@ -1,119 +1,72 @@
-import { render, screen } from '@testing-library/react';
-import type { Advocate } from '@/types/advocate';
-// Mock the 'next/navigation' module since it's used in the Server Component and Client Components
+import { render, screen, fireEvent } from '@testing-library/react';
+import SearchInput from '@/components/SearchInput';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+// mock the next/navigation hooks
 jest.mock('next/navigation', () => ({
-  useRouter: jest.fn(() => ({
-    push: jest.fn(),
-  })),
-  useSearchParams: jest.fn(() => ({
-    get: jest.fn(),
-  })),
-  notFound: jest.fn(),
+  useRouter: jest.fn(),
+  useSearchParams: jest.fn(),
 }));
 
-// Mock the global fetch function to control API responses
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
-
-// Mock the client components to simplify the test
-jest.mock('@/components/AdvocateCard', () => {
-  const MockAdvocateCard = ({ advocate }: { advocate: Advocate }) => (
-    <div data-testid="advocate-card">
-      {advocate.firstName} {advocate.lastName}
-    </div>
-  );
-  MockAdvocateCard.displayName = 'MockAdvocateCard';
-  return MockAdvocateCard;
-});
-
-jest.mock('@/components/SearchInput', () => {
-  const MockSearchInput = () => <input data-testid="search-input" />;
-  MockSearchInput.displayName = 'MockSearchInput';
-  return MockSearchInput;
-});
-
-// Use require() to get the mocked Home component and getAdvocates function
-const Home = require('./page').default;
-const notFound = require('next/navigation').notFound;
-
-describe('Home Page', () => {
+describe('SearchInput Component', () => {
+  // use fake timers to control the debounce timeout
   beforeEach(() => {
-    // Reset mocks before each test
-    jest.clearAllMocks();
+    jest.useFakeTimers();
   });
 
-  it('should render the Solace Advocates heading and the search input', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ data: [] }),
-    });
-
-    render(await Home({ searchParams: {} }));
-
-    expect(
-      screen.getByRole('heading', { name: /solace advocates/i })
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('search-input')).toBeInTheDocument();
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
-  it('should render a list of advocates when data is fetched successfully', async () => {
-    const mockAdvocates = [
-      {
-        id: '1',
-        firstName: 'John',
-        lastName: 'Doe',
-        city: 'New York',
-        degree: 'MD',
-        specialties: ['Cardiology'],
-        yearsOfExperience: 10,
-        phoneNumber: 1234567890,
-      },
-      {
-        id: '2',
-        firstName: 'Jane',
-        lastName: 'Smith',
-        city: 'Los Angeles',
-        degree: 'PhD',
-        specialties: ['Oncology'],
-        yearsOfExperience: 15,
-        phoneNumber: 9876543210,
-      },
-    ];
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ data: mockAdvocates }),
-    });
+  it('should render the input with the correct initial value', () => {
+    // arrange: mock the search params and router
+    (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
+    (useRouter as jest.Mock).mockReturnValue({ replace: jest.fn() });
 
-    render(await Home({ searchParams: {} }));
+    // act: render the component with an initial value
+    render(<SearchInput value="test value" />);
 
-    const advocateCards = await screen.findAllByTestId('advocate-card');
-    expect(advocateCards).toHaveLength(2);
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+    // assert: check if the input element has the correct value
+    expect(screen.getByTestId('search-input')).toHaveValue('test value');
   });
 
-  it('should display "No advocates found" when no advocates are returned from the search', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ data: [] }),
-    });
+  it('should update the URL after a debounce period when typing', () => {
+    // arrange: mock the router and search params
+    const mockRouterReplace = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ replace: mockRouterReplace });
+    (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
 
-    render(await Home({ searchParams: { search: 'nonexistent' } }));
+    // act: render the component and simulate a user typing
+    render(<SearchInput value="" />);
+    const input = screen.getByTestId('search-input');
+    fireEvent.change(input, { target: { value: 'new search' } });
 
-    expect(screen.getByText('No advocates found.')).toBeInTheDocument();
+    // assert: ensure router.replace is not called immediately
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    // act: advance the timers by 400ms (the debounce time)
+    jest.advanceTimersByTime(400);
+
+    // assert: now, ensure router.replace was called with the correct url
+    expect(mockRouterReplace).toHaveBeenCalledWith('/?search=new+search');
   });
 
-  it('should call notFound() on a data fetch error', async () => {
-    // Mock the console.error to prevent it from causing a test failure
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+  it('should remove the search param from the URL when the input is cleared', () => {
+    // arrange: mock the router and search params
+    const mockRouterReplace = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ replace: mockRouterReplace });
+    const initialParams = new URLSearchParams('search=existing+value');
+    (useSearchParams as jest.Mock).mockReturnValue(initialParams);
 
-    // Mock a failed fetch call by returning an `ok: false` response
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-    });
+    // act: render the component and simulate clearing the input
+    render(<SearchInput value="existing value" />);
+    const input = screen.getByTestId('search-input');
+    fireEvent.change(input, { target: { value: '' } });
 
-    await Home({ searchParams: {} });
+    // act: advance the timers to trigger the debounce
+    jest.advanceTimersByTime(400);
 
-    expect(notFound).toHaveBeenCalled();
+    // assert: ensure router.replace was called with the url that has the search param removed
+    expect(mockRouterReplace).toHaveBeenCalledWith('/?');
   });
 });

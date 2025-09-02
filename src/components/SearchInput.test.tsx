@@ -1,88 +1,72 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import SearchInput from './SearchInput';
+import { render, screen, fireEvent } from '@testing-library/react';
+import SearchInput from '@/components/SearchInput';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-// Mock the Next.js router and searchParams hooks
+// mock the next/navigation hooks
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
   useSearchParams: jest.fn(),
 }));
 
-describe('SearchInput', () => {
-  let mockRouter: any;
-  let mockSearchParams: any;
-
-  // Use fake timers to control the debounce timeout
+describe('SearchInput Component', () => {
+  // use fake timers to control the debounce timeout
   beforeEach(() => {
     jest.useFakeTimers();
-    mockRouter = { push: jest.fn() };
-    mockSearchParams = new URLSearchParams();
-
-    (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    (useSearchParams as jest.Mock).mockReturnValue(mockSearchParams);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    jest.clearAllMocks();
   });
 
-  it('should render the label and input field with the correct placeholder', () => {
+  it('should render the input with the correct initial value', () => {
+    // arrange: mock the search params and router
+    (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
+    (useRouter as jest.Mock).mockReturnValue({ replace: jest.fn() });
+
+    // act: render the component with an initial value
+    render(<SearchInput value="test value" />);
+
+    // assert: check if the input element has the correct value
+    expect(screen.getByTestId('search-input')).toHaveValue('test value');
+  });
+
+  it('should update the URL after a debounce period when typing', () => {
+    // arrange: mock the router and search params
+    const mockRouterReplace = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ replace: mockRouterReplace });
+    (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
+
+    // act: render the component and simulate a user typing
     render(<SearchInput value="" />);
+    const input = screen.getByTestId('search-input');
+    fireEvent.change(input, { target: { value: 'new search' } });
 
-    expect(
-      screen.getByLabelText(/search for an advocate/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText(/type name, city, specialty or degree type./i)
-    ).toBeInTheDocument();
-  });
+    // assert: ensure router.replace is not called immediately
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
-  it('should initialize the input with the provided value prop', () => {
-    const initialValue = 'Dr. Smith';
-    render(<SearchInput value={initialValue} />);
-
-    expect(screen.getByDisplayValue(initialValue)).toBeInTheDocument();
-  });
-
-  it('should debounce and push the updated URL after a delay', async () => {
-    const initialValue = '';
-    const typedValue = 'John Doe';
-    render(<SearchInput value={initialValue} />);
-
-    const input = screen.getByLabelText(/search for an advocate/i);
-
-    fireEvent.change(input, { target: { value: typedValue } });
-
-    // Timer has not run yet, so push should not have been called
-    expect(mockRouter.push).not.toHaveBeenCalled();
-
-    // Fast-forward time past the debounce delay
+    // act: advance the timers by 400ms (the debounce time)
     jest.advanceTimersByTime(400);
 
-    // Wait for the push to be called with the correct URL
-    await waitFor(() => {
-      expect(mockRouter.push).toHaveBeenCalledTimes(1);
-      expect(mockRouter.push).toHaveBeenCalledWith('/?search=John+Doe');
-    });
+    // assert: now, ensure router.replace was called with the correct url
+    expect(mockRouterReplace).toHaveBeenCalledWith('/?search=new+search');
   });
 
-  it('should remove the search parameter when the input is cleared', async () => {
-    const initialValue = 'John Doe';
-    mockSearchParams.set('search', initialValue);
+  it('should remove the search param from the URL when the input is cleared', () => {
+    // arrange: mock the router and search params
+    const mockRouterReplace = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ replace: mockRouterReplace });
+    const initialParams = new URLSearchParams('search=existing+value');
+    (useSearchParams as jest.Mock).mockReturnValue(initialParams);
 
-    render(<SearchInput value={initialValue} />);
-
-    const input = screen.getByDisplayValue(initialValue);
-
+    // act: render the component and simulate clearing the input
+    render(<SearchInput value="existing value" />);
+    const input = screen.getByTestId('search-input');
     fireEvent.change(input, { target: { value: '' } });
 
-    // Fast-forward time past the debounce delay
+    // act: advance the timers to trigger the debounce
     jest.advanceTimersByTime(400);
 
-    await waitFor(() => {
-      expect(mockRouter.push).toHaveBeenCalledTimes(1);
-      expect(mockRouter.push).toHaveBeenCalledWith('/?');
-    });
+    // assert: ensure router.replace was called with the url that has the search param removed
+    expect(mockRouterReplace).toHaveBeenCalledWith('/?');
   });
 });

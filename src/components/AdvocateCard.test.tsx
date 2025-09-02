@@ -3,14 +3,13 @@ import AdvocateCard from './AdvocateCard';
 import type { Advocate } from '@/types/advocate';
 
 const advocate: Advocate = {
-  id: '1',
   firstName: 'John',
   lastName: 'Doe',
   city: 'New York',
   degree: 'MD',
   specialties: ['Anxiety', 'Depression'],
   yearsOfExperience: 10,
-  phoneNumber: '5551234567',
+  phoneNumber: 5551234567,
 };
 
 describe('AdvocateCard', () => {
