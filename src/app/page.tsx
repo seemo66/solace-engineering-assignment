@@ -1,91 +1,64 @@
-"use client";
+import AdvocateCard from '@/components/AdvocateCard';
+import SearchInput from '@/components/SearchInput';
+import type { Advocate } from '@/types/advocate';
 
-import { useEffect, useState } from "react";
+// fetches advocates from the api based on a search term
+async function getAdvocates(search: string): Promise<Advocate[] | null> {
+  try {
+    const res = await fetch(
+      `http://localhost:3000/api/advocates?search=${encodeURIComponent(search)}`
+    );
+    // if the response is not successful, throw an error
+    if (!res.ok) {
+      throw new Error('failed to fetch advocates');
+    }
+    const data = await res.json();
+    return data.data;
+  } catch (error) {
+    // logs the api fetch error and returns null on failure
+    console.error('api fetch error:', error);
+    return null;
+  }
+}
 
-export default function Home() {
-  const [advocates, setAdvocates] = useState([]);
-  const [filteredAdvocates, setFilteredAdvocates] = useState([]);
+// homepage component which is a server-side component by default
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: { search?: string };
+}) {
+  // retrieves the search term from the url or uses an empty string if none exists
+  const searchTerm = searchParams.search || '';
+  const advocates = await getAdvocates(searchTerm);
 
-  useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
-        setAdvocates(jsonResponse.data);
-        setFilteredAdvocates(jsonResponse.data);
-      });
-    });
-  }, []);
-
-  const onChange = (e) => {
-    const searchTerm = e.target.value;
-
-    document.getElementById("search-term").innerHTML = searchTerm;
-
-    console.log("filtering advocates...");
-    const filteredAdvocates = advocates.filter((advocate) => {
-      return (
-        advocate.firstName.includes(searchTerm) ||
-        advocate.lastName.includes(searchTerm) ||
-        advocate.city.includes(searchTerm) ||
-        advocate.degree.includes(searchTerm) ||
-        advocate.specialties.includes(searchTerm) ||
-        advocate.yearsOfExperience.includes(searchTerm)
-      );
-    });
-
-    setFilteredAdvocates(filteredAdvocates);
-  };
-
-  const onClick = () => {
-    console.log(advocates);
-    setFilteredAdvocates(advocates);
-  };
+  // if the api fetch fails (advocates is null), render an error message
+  if (advocates === null) {
+    return (
+      <main className="p-6 max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6">solace advocates</h1>
+        <p className="text-red-500">
+          sorry, we couldn&#39;t load the advocates at this time. please try
+          again later.
+        </p>
+      </main>
+    );
+  }
 
   return (
-    <main style={{ margin: "24px" }}>
-      <h1>Solace Advocates</h1>
-      <br />
-      <br />
-      <div>
-        <p>Search</p>
-        <p>
-          Searching for: <span id="search-term"></span>
-        </p>
-        <input style={{ border: "1px solid black" }} onChange={onChange} />
-        <button onClick={onClick}>Reset Search</button>
-      </div>
-      <br />
-      <br />
-      <table>
-        <thead>
-          <th>First Name</th>
-          <th>Last Name</th>
-          <th>City</th>
-          <th>Degree</th>
-          <th>Specialties</th>
-          <th>Years of Experience</th>
-          <th>Phone Number</th>
-        </thead>
-        <tbody>
-          {filteredAdvocates.map((advocate) => {
-            return (
-              <tr>
-                <td>{advocate.firstName}</td>
-                <td>{advocate.lastName}</td>
-                <td>{advocate.city}</td>
-                <td>{advocate.degree}</td>
-                <td>
-                  {advocate.specialties.map((s) => (
-                    <div>{s}</div>
-                  ))}
-                </td>
-                <td>{advocate.yearsOfExperience}</td>
-                <td>{advocate.phoneNumber}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <main className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">solace advocates</h1>
+      {/* a client-side search input component that updates the url */}
+      <SearchInput value={searchTerm} />
+      {/* conditionally render a message or the list of advocates */}
+      {advocates.length === 0 ? (
+        <p className="text-gray-500">no advocates found.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {advocates.map((advocate: Advocate) => (
+            <AdvocateCard key={advocate.phoneNumber} advocate={advocate} />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
